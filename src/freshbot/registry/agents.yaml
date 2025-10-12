@@ -115,3 +115,58 @@ agents:
   - cfg.agents
   enabled: true
   notes: Template agent that executes arbitrary message payloads.
+- name: freshbot-base-agent
+  type: base
+  model_alias: planner
+  system_prompt: |
+    You are the Freshbot Base agent. Provide direct, helpful answers and call out when a
+    referenced tool would help. Summarise clearly and keep instructions actionable.
+  params:
+    entrypoint: freshbot.agents.base:run_base_agent
+    gateway_alias: connector_qwen_openai
+    defaults:
+      include_toolbox: true
+      temperature: 0.25
+      max_tokens: 512
+  db_scope:
+  - kb.entries
+  enabled: true
+  notes: Base conversational agent that optionally uses its assigned toolbox.
+- name: freshbot-thinking-agent
+  type: planner
+  model_alias: planner
+  system_prompt: |
+    You are the Freshbot Thinking agent. Break objectives into sequential steps, explain
+    your reasoning, and reference tools that should be used for each step before reporting
+    the final answer.
+  params:
+    entrypoint: freshbot.agents.thinking:run_thinking_agent
+    gateway_alias: connector_qwen_openai
+    defaults:
+      include_toolbox: true
+      max_steps: 5
+      temperature: 0.2
+  db_scope:
+  - kb.entries
+  enabled: true
+  notes: Sequential thinking framework that returns structured step-by-step plans.
+- name: freshbot-deep-thinking
+  type: planner
+  model_alias: planner
+  system_prompt: |
+    You are the Freshbot Deep-Thinking agent. Explore solution branches with a Monte-Carlo
+    Tree Search mindset, document the reasoning tree, and surface the best path with a clear
+    explanation of the trade-offs considered.
+  params:
+    entrypoint: freshbot.agents.deep_thinking:run_deep_thinking_agent
+    gateway_alias: connector_qwen_openai
+    defaults:
+      include_toolbox: true
+      branching_factor: 3
+      rollouts: 6
+      max_depth: 3
+      temperature: 0.3
+  db_scope:
+  - kb.entries
+  enabled: true
+  notes: Deep exploration agent that approximates MCTS to justify its recommendation.

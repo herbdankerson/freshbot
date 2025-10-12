@@ -37,6 +37,9 @@ freshbot/
 - `src/freshbot/registry/` already mirrors the database state; `devtools/registry_loader.py` keeps DB and YAML in sync.
 - Tests dedicated to agent plumbing will live under `tests/agents/`, mirroring the module layout once implementations land.
 
+## MCP Services
+- `codex-mcp` (under `mcp/codex-mcp`) exposes project-aware read/search/edit tools over FastMCP. The docker compose service binds the repo into `/workspace` and `/app` so chunk edits update ParadeDB and rewrite the underlying files. Use it to manage `project_code` and `project_docs` content without leaving the compose network.
+
 ## Registry Tables & Live State
 ### `cfg.agents`
 Key columns: `name`, `type` (`base`, `planner`, `custom`), `model_alias`, JSON `params` (entrypoint, defaults), `tools_profile`, `db_scope`.
@@ -109,6 +112,12 @@ Legacy HTTP/MCP tools (`search-toolbox`, `docling`, `neo4j_*`, etc.) remain from
 5. For ingestion, use the namespace wrappers (`freshbot.pipeline.ingest_project_code/docs`) so metadata stays aligned with the ParadeDB schemas.
 
 With this structure Freshbot stays self-contained: all runtime decisions flow from database configuration, and code changes live inside the new `src/freshbot/agents/` module family.
+
+## Registry & Script Utilities
+- `freshbot.devtools.registry_loader` is the current bridge between the YAML snapshots in `src/freshbot/registry/` and ParadeDB; it validates payloads, resolves `${ENV}` tokens and upserts into the `cfg.*` tables (`providers`, `models`, `tools`, `agents`, `agent_tools`, `prompts`). The loader preserves UUIDs from the files so references stay stable when rows already exist.
+- `freshbot.devtools.table_loader` is a generic table seeder that inspects the live table schema via `information_schema`, validates required columns, and inserts or upserts rows from a YAML file. It is what we use for ad-hoc seeds outside the registry namespace.
+- `freshbot.devtools.prefect_loader` (not yet wired into CI) exists to register Prefect deployments from Python so orchestration metadata lives alongside application code.
+- These scripts all expect to be executed inside the compose containers because they rely on the project’s installed dependencies and the same `DATABASE_URL`/`PYTHONPATH` wiring as the running services. Future work moves the canonical configuration source fully into ParadeDB with management flows that edit rows directly instead of syncing from YAML snapshots.
 
 ## Project Namespaces
 - `project_code.*` – code-first mirror of the KB schema (documents, chunks, `vector(1024)` embeddings) populated by running `freshbot_document_ingest(..., target_namespace='project_code')` and pointing `target_entries` at `project_code.entries`.

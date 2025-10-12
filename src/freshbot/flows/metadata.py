@@ -4,7 +4,21 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional
 
-from prefect import flow, get_run_logger
+try:  # pragma: no cover
+    from prefect import flow, get_run_logger
+except ModuleNotFoundError:  # pragma: no cover - fallback for local tooling
+    import logging
+
+    def flow(function=None, *_, **__):  # type: ignore
+        if function is None:
+            def decorator(fn):
+                return fn
+
+            return decorator
+        return function
+
+    def get_run_logger():
+        return logging.getLogger(__name__)
 
 
 @flow(name="freshbot_metadata_flag", persist_result=True)

@@ -7,7 +7,21 @@ from contextlib import redirect_stdout
 from io import StringIO
 from typing import Any, Dict, Mapping, Optional, Sequence
 
-from prefect import flow, get_run_logger
+try:  # pragma: no cover
+    from prefect import flow, get_run_logger
+except ModuleNotFoundError:  # pragma: no cover - fallback for local execution
+    import logging
+
+    def flow(function=None, *_, **__):  # type: ignore
+        if function is None:
+            def decorator(fn):
+                return fn
+
+            return decorator
+        return function
+
+    def get_run_logger():
+        return logging.getLogger(__name__)
 
 from freshbot.registry import AgentRecord, get_registry
 

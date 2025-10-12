@@ -44,6 +44,13 @@ The dedicated `project_code.entries` and `project_docs.entries` tables were crea
 
 Both wrappers add file metadata (`source.filename`, `source.relative_path`, `source.category`, `source.language`) and point the flow at the correct namespace/entries table. They return the same payload as `freshbot_document_ingest`. Use `pip install -e /workspace/freshbot` inside the compose container so the ETL tasks can import the package without manual copying.
 
+## Supporting scripts
+- `python -m freshbot.devtools.registry_loader --apply` keeps ParadeDB’s `cfg.*` tables aligned with the definitions under `src/freshbot/registry/`. It performs schema-aware upserts and must run from a compose container so the correct dependencies and environment variables are loaded.
+- `python -m freshbot.devtools.table_loader --table project_code.entries --rows path/to/rows.yaml` is the generic seeding path for any table; it introspects the live schema, validates the YAML payload, and inserts or updates rows while preserving existing UUIDs.
+- `python -m freshbot.devtools.prefect_loader` (experimental) will register Prefect deployments straight from code. Use it once the flows are packaged so workers stay in sync with the repo.
+
+These utilities currently read from YAML snapshots; longer-term we plan to manage configuration purely through ParadeDB rows and scripted edits instead of editing files directly.
+
 ## Follow-ups
 1. Keep the TEI (`tei-gte-large`, `tei-legal`) services running in the compose stack; future host-side runs will break back to stub vectors.
 2. Backfill historic artefacts by re-running `freshbot_document_ingest` with `target_namespace='project_code'`/`'project_docs'` for each repository batch.

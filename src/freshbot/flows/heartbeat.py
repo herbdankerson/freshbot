@@ -6,7 +6,24 @@ import datetime as dt
 import logging
 from typing import Dict
 
-from prefect import flow, task
+try:  # pragma: no cover
+    from prefect import flow, task
+except ModuleNotFoundError:  # pragma: no cover - fallback for local tooling
+    def flow(function=None, *_, **__):  # type: ignore
+        if function is None:
+            def decorator(fn):
+                return fn
+
+            return decorator
+        return function
+
+    def task(function=None, *_, **__):  # type: ignore
+        if function is None:
+            def decorator(fn):
+                return fn
+
+            return decorator
+        return function
 
 LOGGER = logging.getLogger(__name__)
 

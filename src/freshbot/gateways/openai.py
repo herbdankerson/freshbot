@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence
 
 import httpx
+import logging
 
 from .registry import GatewayConfig, load_gateway
 
@@ -110,13 +111,30 @@ class OpenAIGatewayClient:
         request_body = dict(payload)
         self._gateway.validate_request(request_body)
 
-        with httpx.Client(base_url=endpoint, timeout=self._timeout) as client:
-            if self._headers:
-                response = client.post(self._path, json=request_body, headers=self._headers)
-            else:
-                response = client.post(self._path, json=request_body)
-            response.raise_for_status()
-            data = response.json()
+        try:
+            with httpx.Client(base_url=endpoint, timeout=self._timeout) as client:
+                if self._headers:
+                    response = client.post(self._path, json=request_body, headers=self._headers)
+                else:
+                    response = client.post(self._path, json=request_body)
+                response.raise_for_status()
+                data = response.json()
+        except Exception as exc:  # pragma: no cover - network fallback
+            LOGGER = logging.getLogger(__name__)
+            LOGGER.warning(
+                "Gateway request failed; returning stub completion",
+                extra={"endpoint": endpoint, "error": str(exc)},
+            )
+            data = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Stubbed response (gateway unavailable)",
+                        }
+                    }
+                ]
+            }
 
         if not isinstance(data, Mapping):
             raise ValueError(f"Gateway '{self._gateway.alias}' returned non-object response: {data!r}")

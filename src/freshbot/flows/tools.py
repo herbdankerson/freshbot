@@ -4,7 +4,21 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from prefect import flow, get_run_logger
+try:  # pragma: no cover
+    from prefect import flow, get_run_logger
+except ModuleNotFoundError:  # pragma: no cover - fallback for local tooling
+    import logging
+
+    def flow(function=None, *_, **__):  # type: ignore
+        if function is None:
+            def decorator(fn):
+                return fn
+
+            return decorator
+        return function
+
+    def get_run_logger():
+        return logging.getLogger(__name__)
 from sqlalchemy import text as sql_text
 
 from freshbot.db import get_engine

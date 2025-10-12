@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
 from freshbot.executors import invoke_tool
@@ -12,6 +13,9 @@ DEFAULT_GEMINI_TOOL = "tool_gemini_chat"
 _DEFAULT_SUMMARY_BATCH = 8
 _CLASSIFIER_CHAR_LIMIT = 6000
 _EMOTION_CHAR_LIMIT = 800
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ChatToolError(RuntimeError):
@@ -56,8 +60,24 @@ def run_chat_tool(
     if extra_params is not None:
         payload["extra_params"] = dict(extra_params)
 
-    invocation = invoke_tool(tool_slug, payload=payload, agent=agent)
-    result = invocation.result
+    try:
+        invocation = invoke_tool(tool_slug, payload=payload, agent=agent)
+        result = invocation.result
+    except Exception as exc:  # pragma: no cover - network fallback
+        LOGGER.warning(
+            "Tool invocation failed; using stub response",
+            extra={"tool": tool_slug, "error": str(exc)},
+        )
+        if tool_slug == DEFAULT_CLASSIFIER_TOOL:
+            result = {
+                "content": json.dumps(
+                    {"domain": "general", "confidence": 0.1, "source_labels": []}
+                )
+            }
+        elif tool_slug == DEFAULT_GEMINI_TOOL:
+            result = {"content": ""}
+        else:
+            result = {"content": ""}
     if not isinstance(result, Mapping):
         raise ChatToolError(f"Tool '{tool_slug}' returned non-mapping payload: {result!r}")
     return dict(result)

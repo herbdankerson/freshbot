@@ -222,11 +222,16 @@ def _load_agents(connection) -> Dict[int, AgentRecord]:
     return agents
 
 
-def _attach_agent_tools(connection, agents: Mapping[int, AgentRecord], tools: Mapping[str, ToolRecord]) -> None:
+def _attach_agent_tools(
+    connection,
+    agents: Mapping[int, AgentRecord],
+    tools_by_slug: Mapping[str, ToolRecord],
+    tools_by_id: Mapping[int, ToolRecord],
+) -> None:
     rows = connection.execute(
         text(
             """
-            SELECT agent_id, tool_slug, overrides
+            SELECT agent_id, tool_id, overrides
             FROM cfg.agent_tools
             """
         )
@@ -235,9 +240,13 @@ def _attach_agent_tools(connection, agents: Mapping[int, AgentRecord], tools: Ma
         agent = agents.get(row["agent_id"])
         if agent is None:
             continue
-        slug = row["tool_slug"].strip()
-        if slug not in tools:
+        tool_record: Optional[ToolRecord] = None
+        tool_id = row.get("tool_id")
+        if tool_id is not None:
+            tool_record = tools_by_id.get(int(tool_id))
+        if tool_record is None:
             continue
+        slug = tool_record.slug
         overrides = dict(row.get("overrides") or {})
         agent.tool_bindings[slug] = overrides
 
@@ -252,7 +261,8 @@ def load_registry() -> RegistrySnapshot:
             models = _load_models(connection, providers)
             tools = _load_tools(connection)
             agents_by_id = _load_agents(connection)
-            _attach_agent_tools(connection, agents_by_id, tools)
+            tools_by_id = {record.id: record for record in tools.values()}
+            _attach_agent_tools(connection, agents_by_id, tools, tools_by_id)
     except Exception as exc:
         LOGGER.error("Failed to load configuration registry from database", exc_info=exc)
         raise RuntimeError(
