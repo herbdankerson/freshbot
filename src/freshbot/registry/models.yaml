@@ -1,0 +1,108 @@
+models:
+- alias: connector_gemini_litellm
+  name: connector_gemini_litellm
+  provider: connectors
+  purpose: connector
+  endpoint: ${LITELLM_BASE_URL}
+  default_params:
+    connector_type: llm
+    driver: litellm
+    description: Gemini access via LiteLLM router
+    healthcheck_path: /v1/models
+  config:
+    routing_model: gemini/gemini-2.5-flash
+    schema:
+      request:
+        required:
+        - model
+        - messages
+      response:
+        required:
+        - choices
+    timeout_seconds: 60
+    headers:
+      Authorization: Bearer ${LITELLM_VIRTUAL_KEY}
+- alias: connector_qwen_openai
+  name: connector_qwen_openai
+  provider: connectors
+  purpose: connector
+  endpoint: http://qwen-openai-proxy:5000
+  default_params:
+    connector_type: llm
+    driver: openai
+    description: Qwen OpenAI-compatible proxy
+    healthcheck_path: /health
+  config:
+    routing_model: qwen3-235b-int8
+    schema:
+      request:
+        required:
+        - model
+        - messages
+      response:
+        required:
+        - choices
+    timeout_seconds: 240
+- alias: connector_paradedb
+  name: connector_paradedb
+  provider: connectors
+  purpose: connector
+  endpoint: postgresql://agent:agentpass@paradedb:5432/agentdb
+  default_params:
+    connector_type: database
+    driver: postgres
+    description: ParadeDB primary warehouse
+    schema: public
+  config:
+    sslmode: prefer
+- alias: connector_neo4j
+  name: connector_neo4j
+  provider: connectors
+  purpose: connector
+  endpoint: bolt://neo4j:7687
+  default_params:
+    connector_type: graph
+    driver: neo4j
+    description: Neo4j knowledge graph
+    database: neo4j
+  config:
+    http_endpoint: http://neo4j:7474
+    username: ${NEO4J_USER}
+    password_env: NEO4J_PASSWORD
+- alias: connector_ollama_code_embedding
+  name: connector_ollama_code_embedding
+  provider: connectors
+  purpose: connector
+  endpoint: http://ollama:11434/api/embeddings
+  default_params:
+    connector_type: embedding
+    driver: ollama
+    description: Code embedding via manutic/nomic-embed-code on Ollama
+    model: manutic/nomic-embed-code
+    dims: 1536
+    schema:
+      request:
+        required:
+        - model
+        - prompt
+      response:
+        required:
+        - embedding
+    prompt_template: 'Represent this code content for semantic retrieval:
+
+      {text}'
+    request_overrides:
+      options:
+        embedding_type: code
+    timeout_seconds: 120
+- alias: emb-code
+  name: emb-code
+  provider: ollama
+  purpose: embedding
+  endpoint: http://ollama:11434/api/embeddings
+  dims: 1536
+  default_params:
+    gateway_alias: connector_ollama_code_embedding
+    connector_type: embedding
+    driver: ollama
+    description: Active code embedding space via Ollama gateway

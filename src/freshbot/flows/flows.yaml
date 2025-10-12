@@ -1,0 +1,132 @@
+flows:
+- callable: freshbot.flows.heartbeat:heartbeat_flow
+  name: freshbot-heartbeat-deployment
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - heartbeat
+  description: Heartbeat flow used to validate Prefect connectivity.
+  schedule:
+    cron: '*/5 * * * *'
+    timezone: UTC
+- callable: freshbot.flows.ingestion:freshbot_document_ingest
+  name: freshbot-document-ingest
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - ingestion
+  description: Freshbot ingestion pipeline wrapping legacy document flow.
+- callable: freshbot.flows.tools:qwen_chat_tool
+  name: freshbot-tool-qwen-chat
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - tool
+  description: Qwen OpenAI-compatible chat tool.
+- callable: freshbot.flows.tools:gemini_chat_tool
+  name: freshbot-tool-gemini-chat
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - tool
+  description: Gemini chat via LiteLLM gateway.
+- callable: freshbot.flows.tools:code_embedding_tool
+  name: freshbot-tool-code-embed
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - tool
+  description: Ollama manutic/nomic-embed-code embeddings.
+- callable: freshbot.flows.tools:kb_search_tool
+  name: freshbot-tool-kb-search
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - tool
+  description: Knowledge base hybrid search helper.
+- callable: freshbot.flows.tools:search_agents_tool
+  name: freshbot-tool-search-agents
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - tool
+  description: Search cfg.agents metadata.
+- callable: freshbot.flows.tools:search_tools_tool
+  name: freshbot-tool-search-tools
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - tool
+  description: Search cfg.tools metadata.
+- callable: freshbot.flows.tools:agent_registry_snapshot_tool
+  name: freshbot-tool-registry-snapshot
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - tool
+  description: Snapshot of registry tables for debugging.
+- callable: freshbot.flows.metadata:metadata_flag_flow
+  name: freshbot-metadata-flag
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - metadata
+  description: Stub handler for entry metadata flags.
+- callable: freshbot.flows.agents:planner_agent_flow
+  name: freshbot-agent-planner
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - agent
+  description: Generates execution plans for Freshbot requests.
+- callable: freshbot.flows.agents:tool_user_agent_flow
+  name: freshbot-agent-tool-user
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - agent
+  description: Translates planner steps into tool actions.
+- callable: freshbot.flows.agents:responder_agent_flow
+  name: freshbot-agent-responder
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - agent
+  description: Creates final user-facing responses.
+- callable: freshbot.flows.agents:auditor_agent_flow
+  name: freshbot-agent-auditor
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - agent
+  description: Audits responses against requirements.
+- callable: freshbot.flows.agents:code_executor_agent_flow
+  name: freshbot-agent-code-executor
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - agent
+  description: Runs quick Python snippets for automation.
+- callable: freshbot.flows.agents:custom_agent_flow
+  name: freshbot-agent-custom
+  work_queue: freshbot-default
+  work_pool: freshbot-process
+  tags:
+  - freshbot
+  - agent
+  description: Executes custom agent payloads on demand.

@@ -1,0 +1,47 @@
+agent_tools:
+- agent: freshbot-planner
+  tool: prefect_flow_executor
+  overrides:
+    default_deployment: freshbot-heartbeat-deployment
+- agent: freshbot-planner
+  tool: connector_catalog
+  overrides:
+    expose_disabled: false
+- agent: freshbot-planner
+  tool: tool_search_agents
+  overrides: {}
+- agent: freshbot-planner
+  tool: tool_search_tools
+  overrides: {}
+- agent: freshbot-planner
+  tool: tool_kb_search
+  overrides:
+    limit: 5
+- agent: freshbot-planner
+  tool: tool_registry_snapshot
+  overrides: {}
+- agent: freshbot-tool-user
+  tool: tool_qwen_chat
+  overrides: {}
+- agent: freshbot-tool-user
+  tool: tool_kb_search
+  overrides:
+    limit: 10
+- agent: freshbot-tool-user
+  tool: tool_code_embed
+  overrides: {}
+- agent: freshbot-responder
+  tool: tool_qwen_chat
+  overrides:
+    temperature: 0.2
+- agent: freshbot-responder
+  tool: tool_gemini_chat
+  overrides:
+    temperature: 0.1
+- agent: freshbot-auditor
+  tool: tool_qwen_chat
+  overrides:
+    temperature: 0.0
+- agent: freshbot-custom-agent
+  tool: tool_qwen_chat
+  overrides: {}

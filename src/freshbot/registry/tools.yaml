@@ -1,0 +1,172 @@
+tools:
+- slug: prefect_flow_executor
+  kind: native
+  manifest_or_ref: freshbot.executors.prefect:execute_flow
+  default_params:
+    description: Prefect flow executor entrypoint
+    connector_alias: connector_paradedb
+    log_with_prefect: true
+  notes: Executes registered Prefect deployments on demand.
+- slug: connector_catalog
+  kind: native
+  manifest_or_ref: freshbot.connectors.catalog:lookup
+  default_params:
+    description: Enumerate available connectors and scopes.
+  notes: Provides read-only access to connector metadata for agents.
+- slug: tool_qwen_chat
+  kind: native
+  manifest_or_ref: freshbot.flows.tools:qwen_chat_tool
+  default_params:
+    description: Chat interface for the Qwen OpenAI-compatible gateway.
+    gateway_alias: connector_qwen_openai
+    input_schema:
+      type: object
+      required:
+      - messages
+      properties:
+        messages:
+          type: array
+        system_prompt:
+          type: string
+        temperature:
+          type: number
+        max_tokens:
+          type: integer
+    output_schema:
+      type: object
+      properties:
+        content:
+          type: string
+        response:
+          type: object
+  notes: Primary LLM interface for reasoning workloads.
+- slug: tool_gemini_chat
+  kind: native
+  manifest_or_ref: freshbot.flows.tools:gemini_chat_tool
+  default_params:
+    description: Gemini 2.5 Flash chat via LiteLLM routing.
+    gateway_alias: connector_gemini_litellm
+    input_schema:
+      type: object
+      required:
+      - messages
+      properties:
+        messages:
+          type: array
+        system_prompt:
+          type: string
+        temperature:
+          type: number
+        max_tokens:
+          type: integer
+    output_schema:
+      type: object
+      properties:
+        content:
+          type: string
+        response:
+          type: object
+  notes: Fallback chat interface using Gemini via LiteLLM.
+- slug: tool_code_embed
+  kind: native
+  manifest_or_ref: freshbot.flows.tools:code_embedding_tool
+  default_params:
+    description: Generate code embeddings using manutic/nomic-embed-code on Ollama.
+    gateway_alias: connector_ollama_code_embedding
+    input_schema:
+      type: object
+      required:
+      - texts
+      properties:
+        texts:
+          type: array
+          items:
+            type: string
+    output_schema:
+      type: object
+      properties:
+        count:
+          type: integer
+        dimensions:
+          type: integer
+  notes: Produces 1536-dimension embeddings for code-aware retrieval.
+- slug: tool_kb_search
+  kind: native
+  manifest_or_ref: freshbot.flows.tools:kb_search_tool
+  default_params:
+    description: Hybrid search over kb.entries via ParadeDB.
+    input_schema:
+      type: object
+      required:
+      - query
+      properties:
+        query:
+          type: string
+        limit:
+          type: integer
+        min_score:
+          type: number
+    output_schema:
+      type: object
+      properties:
+        results:
+          type: array
+  notes: Wraps kb.search_entries to provide KB access to agents.
+- slug: tool_search_agents
+  kind: native
+  manifest_or_ref: freshbot.flows.tools:search_agents_tool
+  default_params:
+    description: Search cfg.agents for matching entries.
+    input_schema:
+      type: object
+      required:
+      - query
+      properties:
+        query:
+          type: string
+        limit:
+          type: integer
+        include_disabled:
+          type: boolean
+    output_schema:
+      type: object
+      properties:
+        results:
+          type: array
+  notes: Supports planner lookup of agent capabilities.
+- slug: tool_search_tools
+  kind: native
+  manifest_or_ref: freshbot.flows.tools:search_tools_tool
+  default_params:
+    description: Search cfg.tools for relevant executors.
+    input_schema:
+      type: object
+      required:
+      - query
+      properties:
+        query:
+          type: string
+        limit:
+          type: integer
+        include_disabled:
+          type: boolean
+    output_schema:
+      type: object
+      properties:
+        results:
+          type: array
+  notes: Supports planner lookup of tool capabilities.
+- slug: tool_registry_snapshot
+  kind: native
+  manifest_or_ref: freshbot.flows.tools:agent_registry_snapshot_tool
+  default_params:
+    description: Return a snapshot of registry tables for debugging.
+    input_schema:
+      type: object
+      properties: {}
+    output_schema:
+      type: object
+      properties:
+        summary:
+          type: object
+  notes: Useful for debugging registry state available to agents.

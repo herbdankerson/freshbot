@@ -1,0 +1,13 @@
+providers:
+  - slug: litellm
+    display_name: LiteLLM Router
+    notes: Central router for language model traffic via LiteLLM.
+  - slug: tei
+    display_name: Text Embeddings Inference
+    notes: Local TEI embedding backends for Freshbot.
+  - slug: ollama
+    display_name: Ollama Gateway
+    notes: Local Ollama runtime for Qwen-based models and embeddings.
+  - slug: connectors
+    display_name: Freshbot Connectors
+    notes: Logical grouping for source connectors (databases, LLM proxies, graph stores).
