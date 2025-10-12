@@ -38,6 +38,12 @@ Once Qwen is reachable these entrypoints will surface real plans thanks to the s
 
 The dedicated `project_code.entries` and `project_docs.entries` tables were created with `CREATE TABLE ... LIKE kb.entries INCLUDING ALL` so downstream agents can read project-specific responses without polluting the primary KB.
 
+## Wrapper helpers
+- Code artefacts: `freshbot.pipeline.ingest_project_code(path, source_root=...)`
+- Documentation artefacts: `freshbot.pipeline.ingest_project_docs(path, source_root=...)`
+
+Both wrappers add file metadata (`source.filename`, `source.relative_path`, `source.category`, `source.language`) and point the flow at the correct namespace/entries table. They return the same payload as `freshbot_document_ingest`. Use `pip install -e /workspace/freshbot` inside the compose container so the ETL tasks can import the package without manual copying.
+
 ## Follow-ups
 1. Keep the TEI (`tei-gte-large`, `tei-legal`) services running in the compose stack; future host-side runs will break back to stub vectors.
 2. Backfill historic artefacts by re-running `freshbot_document_ingest` with `target_namespace='project_code'`/`'project_docs'` for each repository batch.

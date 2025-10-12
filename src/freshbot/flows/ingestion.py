@@ -4,10 +4,52 @@ from __future__ import annotations
 
 import base64
 from typing import Dict, Optional
-from prefect import flow, get_run_logger
+try:  # pragma: no cover - Prefect optional for CLI usage
+    from prefect import flow, get_run_logger
+except Exception:  # pragma: no cover - fallback for local tooling
+    import logging
 
-from etl.flows.flow_document_intake import document_intake_flow
-from etl.tasks.intake_models import FlowReport, IngestItem
+    def flow(function=None, *_, **__):  # type: ignore
+        if function is None:
+            def decorator(fn):
+                return fn
+
+            return decorator
+        return function
+
+    def get_run_logger():
+        return logging.getLogger(__name__)
+
+try:
+    from etl.flows.flow_document_intake import document_intake_flow
+    from etl.tasks.intake_models import FlowReport, IngestItem
+except Exception:
+    class FlowReport:
+        """Placeholder `FlowReport` for unit tests."""
+
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    class IngestItem:
+        """Placeholder `IngestItem` for unit tests."""
+
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    def _missing_document_intake_flow(*_, **__):
+        raise RuntimeError(
+            "document_intake_flow is unavailable. Run inside the compose container "
+            "or install the Intellibot ETL package."
+        )
+
+    class _DocFlowProxy:
+        def with_options(self, **__):
+            return _missing_document_intake_flow
+
+        def __call__(self, *args, **kwargs):
+            return _missing_document_intake_flow(*args, **kwargs)
+
+    document_intake_flow = _DocFlowProxy()
 
 from ..connectors.catalog import lookup as list_connectors
 
@@ -20,6 +62,8 @@ def freshbot_document_ingest(
     display_name: str,
     content_b64: Optional[str] = None,
     extra_metadata: Optional[Dict[str, object]] = None,
+    target_namespace: str = "kb",
+    target_entries: Optional[str] = None,
 ) -> Dict[str, object]:
     """Ingest a document into the knowledge base using the Freshbot pipeline."""
 
@@ -40,6 +84,8 @@ def freshbot_document_ingest(
         display_name=display_name,
         content=payload,
         extra_metadata=extra_metadata,
+        target_namespace=target_namespace,
+        target_entries=target_entries,
     )
 
     ingest_item: IngestItem = report.ingest_item

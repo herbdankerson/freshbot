@@ -106,6 +106,7 @@ Legacy HTTP/MCP tools (`search-toolbox`, `docling`, `neo4j_*`, etc.) remain from
 2. Provide framework shims (e.g., `tot.py`) that expose callables referenced by `cfg.agents.params.entrypoint`.
 3. Extend tests (`tests/agents/`) to cover registry resolution, planner branching, and tool invocation overrides.
 4. Keep connectors discoverable through the `connector_catalog` tool so planning frameworks can dynamically request access to sources.
+5. For ingestion, use the namespace wrappers (`freshbot.pipeline.ingest_project_code/docs`) so metadata stays aligned with the ParadeDB schemas.
 
 With this structure Freshbot stays self-contained: all runtime decisions flow from database configuration, and code changes live inside the new `src/freshbot/agents/` module family.
 

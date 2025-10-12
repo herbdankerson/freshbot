@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freshbot"
+version = "0.1.0"
+description = "Modular agent runtime and ingestion toolkit for Freshbot."
+authors = [{name = "Codex"}]
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    "prefect>=3.0.0",
+    "SQLAlchemy>=2.0.30",
+    "psycopg[binary]>=3.2.0",
+    "httpx>=0.28.0",
+    "pyyaml>=6.0",
+    "fastmcp>=2.12.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["src"]
+markers = [
+    "slow: integration test requiring running compose services"
+]
+
+testpaths = ["tests"]
+
+[tool.black]
+target-version = ["py311"]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "B"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
