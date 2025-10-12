@@ -39,6 +39,7 @@ freshbot/
 
 ## MCP Services
 - `codex-mcp` (under `mcp/codex-mcp`) exposes project-aware read/search/edit tools over FastMCP. The docker compose service binds the repo into `/workspace` and `/app` so chunk edits update ParadeDB and rewrite the underlying files. Use it to manage `project_code` and `project_docs` content without leaving the compose network.
+  - The server also mirrors each tool behind a `GET/POST /tools/...` REST surface for quick curl checks, and supports a file-upload helper (`upload_document`) that writes into the configured `CODEX_UPLOAD_ROOT` (defaults to `/workspace`).
 
 ## Registry Tables & Live State
 ### `cfg.agents`

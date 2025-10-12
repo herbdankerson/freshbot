@@ -11,6 +11,7 @@ Codex MCP exposes ParadeDB-backed tools for reading, searching, and editing proj
   - `CODEX_MCP_SCOPES`: allowed schemas (`project_code,project_docs` by default).
   - `CODEX_CODE_ROOTS` (optional): semicolon/comma separated additional roots for locating files.
   - `CODEX_MCP_PUBLIC_ENDPOINT` (optional): manifest endpoint override.
+  - `CODEX_UPLOAD_ROOT` (optional): base directory for uploaded files (defaults to the first `CODEX_CODE_ROOTS` entry or `/workspace`).
 - **Health check**: `curl http://localhost:8105/.well-known/mcp.json` should return the FastMCP manifest if the server is up.
 
 ## Tools
@@ -22,6 +23,7 @@ Codex MCP exposes ParadeDB-backed tools for reading, searching, and editing proj
 | `get_document` | Fetches compiled text and chunk metadata for a document id. |
 | `search_entries` | Full-text search (`plainto_tsquery`) against chunk entries per scope. Optional `document_id` to narrow to a single document. |
 | `update_chunk` | Replaces chunk text, clears related embeddings, updates ParadeDB records, and rewrites the backing file. |
+| `upload_document` | Writes UTF-8 text to a path under the configured upload root and reports bytes written. |
 
 Each tool accepts an optional `scope` argument (`project_code`, `project_docs`, `kb`) so the agent can target the relevant namespace.
 
@@ -35,3 +37,14 @@ Each tool accepts an optional `scope` argument (`project_code`, `project_docs`, 
 4. Re-run the ingestion wrapper (inside compose) to re-embed if needed.
 
 All edits should be executed from inside the compose container so the DSN and filesystem mounts resolve correctly.
+
+## HTTP convenience routes
+For quick smoke-tests (or simple curl usage) the server exposes REST-style wrappers:
+
+- `GET /tools/list-documents?scope=project_docs&limit=5`
+- `GET /tools/document/{document_id}?scope=project_docs`
+- `GET /tools/search-entries?scope=project_docs&query=freshbot&limit=5`
+- `POST /tools/update-chunk` with JSON body `{ "scope": "project_docs", "document_id": "…", "chunk_index": 0, "new_text": "…" }`
+- `POST /tools/upload-document` with JSON `{ "scope": "project_docs", "relative_path": "intellibot/docs/new.md", "content": "…" }`
+
+These routes call the same logic as the MCP tools, so results mirror what an MCP client would see. Use `CODEX_UPLOAD_ROOT`/`CODEX_CODE_ROOTS` to control where uploaded files land; the default is `/workspace`, which maps to the host repo root under compose.
