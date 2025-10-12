@@ -51,6 +51,11 @@ Both wrappers add file metadata (`source.filename`, `source.relative_path`, `sou
 
 These utilities currently read from YAML snapshots; longer-term we plan to manage configuration purely through ParadeDB rows and scripted edits instead of editing files directly.
 
+### Container-only execution
+- Install Freshbot inside the `api` container (`docker compose exec api pip install --no-cache-dir https://github.com/herbdankerson/freshbot/archive/refs/heads/master.zip`) before running any loader or flow commands. Skip host-side virtual environments—the compose stack is the single source of truth for dependencies and database access.
+- Run loaders with the required environment variables set, for example:
+  `docker compose exec api env LITELLM_BASE_URL=http://litellm:4000 LITELLM_VIRTUAL_KEY=dev-placeholder-key NEO4J_USER=neo4j DATABASE_URL=postgresql://agent:agentpass@paradedb:5432/agentdb python -m freshbot.devtools.registry_loader --registry-dir /usr/local/lib/python3.12/site-packages/freshbot/registry --apply`
+
 ## Follow-ups
 1. Keep the TEI (`tei-gte-large`, `tei-legal`) services running in the compose stack; future host-side runs will break back to stub vectors.
 2. Backfill historic artefacts by re-running `freshbot_document_ingest` with `target_namespace='project_code'`/`'project_docs'` for each repository batch.

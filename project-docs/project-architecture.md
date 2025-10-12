@@ -118,6 +118,7 @@ With this structure Freshbot stays self-contained: all runtime decisions flow fr
 - `freshbot.devtools.table_loader` is a generic table seeder that inspects the live table schema via `information_schema`, validates required columns, and inserts or upserts rows from a YAML file. It is what we use for ad-hoc seeds outside the registry namespace.
 - `freshbot.devtools.prefect_loader` (not yet wired into CI) exists to register Prefect deployments from Python so orchestration metadata lives alongside application code.
 - These scripts all expect to be executed inside the compose containers because they rely on the project’s installed dependencies and the same `DATABASE_URL`/`PYTHONPATH` wiring as the running services. Future work moves the canonical configuration source fully into ParadeDB with management flows that edit rows directly instead of syncing from YAML snapshots.
+- Install the Freshbot package inside the API container before running any loaders: `docker compose exec api pip install --no-cache-dir https://github.com/herbdankerson/freshbot/archive/refs/heads/master.zip`. Host-side virtual environments are not supported; execute from inside the container so dependencies and DSNs match production.
 
 ## Project Namespaces
 - `project_code.*` – code-first mirror of the KB schema (documents, chunks, `vector(1024)` embeddings) populated by running `freshbot_document_ingest(..., target_namespace='project_code')` and pointing `target_entries` at `project_code.entries`.

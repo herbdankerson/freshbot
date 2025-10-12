@@ -7,7 +7,7 @@ This guide tracks the major documentation assets across the Freshbot and Intelli
 | Area | Document | Path | Summary |
 | --- | --- | --- | --- |
 | Freshbot | Project Architecture | `project-docs/project-architecture.md` | High-level runtime layout, registry description, and now an MCP-services section pointing at `codex-mcp`.
-| Freshbot | Project Ingestion | `project-docs/project-ingestion.md` | ParadeDB namespace snapshots, ingestion flow notes, and container-only run instructions.
+| Freshbot | Project Ingestion | `project-docs/project-ingestion.md` | ParadeDB namespace snapshots, ingestion flow notes, and explicit container-only install/run commands.
 | Freshbot | Codex MCP | `project-docs/codex-mcp.md` | Service summary, exposed tools, and editing workflow for the new FastMCP server.
 | Freshbot | Documentation Guide | `project-docs/documentation-guide.md` | (This file) master index for docs.
 | Intellibot | Project Overview | `intellibot/project-docs/project.md` | Legacy architecture outline, agent roles, and service inventory.

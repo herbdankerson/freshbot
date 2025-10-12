@@ -11,6 +11,7 @@ Codex MCP exposes ParadeDB-backed tools for reading, searching, and editing proj
   - `CODEX_MCP_SCOPES`: allowed schemas (`project_code,project_docs` by default).
   - `CODEX_CODE_ROOTS` (optional): semicolon/comma separated additional roots for locating files.
   - `CODEX_MCP_PUBLIC_ENDPOINT` (optional): manifest endpoint override.
+- **Health check**: `curl http://localhost:8105/mcp/manifest` should return the FastMCP manifest if the server is up.
 
 ## Tools
 `codex_mcp` registers four FastMCP tools:
