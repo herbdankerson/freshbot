@@ -38,7 +38,9 @@ freshbot/
 - Tests dedicated to agent plumbing will live under `tests/agents/`, mirroring the module layout once implementations land.
 
 ## MCP Services
-- `codex-mcp` (under `mcp/codex-mcp`) exposes project-aware read/search/edit tools over FastMCP. The docker compose service binds the repo into `/workspace` and `/app` so chunk edits update ParadeDB and rewrite the underlying files. Use it to manage `project_code` and `project_docs` content without leaving the compose network.
+- `codex-mcp` (under `mcp/codex-mcp`) exposes project-aware read/search/edit tools over FastMCP. The docker compose service binds the repo into `/workspace` and `/app` so chunk edits update ParadeDB and rewrite the underlying files. It now filters development artefacts via `kb.*` tables + the `is_dev` flag instead of separate schemas.
+- Flag management is centralised in `cfg.flags` with runtime helpers under `freshbot.registry.flag_registry`. Every ingest or search call resolves flags through this registry so new booleans can be introduced without code changes.
+- Cross-document references live alongside metadata (`metadata->'references'`). The helper `freshbot.references` extracts reference IDs, resolves related entries/documents, and surfaces backlinks in `search_entries` / `get_document` responses.
   - The server also mirrors each tool behind a `GET/POST /tools/...` REST surface for quick curl checks, and supports a file-upload helper (`upload_document`) that writes into the configured `CODEX_UPLOAD_ROOT` (defaults to `/workspace`).
 
 ## Registry Tables & Live State
@@ -75,7 +77,7 @@ Connector inventory already aligned with Freshbot:
 | `connector_qwen_openai` | `http://qwen-openai-proxy:5000` | Qwen OpenAI-compatible gateway (primary reasoning LLM). |
 | `connector_gemini_litellm` | `http://litellm:4000` | Gemini via LiteLLM router for fallback reasoning. |
 | `connector_neo4j` | `bolt://neo4j:7687` | Neo4j graph connector. |
-| `connector_ollama_code_embedding` | `http://ollama:11434/api/embeddings` | Code embedding via Ollama (manutic/nomic-embed-code). |
+| `connector_ollama_code_embedding` | `http://qwen3-embed:8080/v1/embeddings` | Code embedding via the Vulkan Qwen2.5 service (OpenAI-compatible). |
 
 Embedding and chat model aliases (`emb-code`, `planner`, `responder`, etc.) continue to exist for backwards compatibility; Freshbot agents reference the connector aliases via `params.gateway_alias`.
 
@@ -110,7 +112,7 @@ Legacy HTTP/MCP tools (`search-toolbox`, `docling`, `neo4j_*`, etc.) remain from
 2. Provide framework shims (e.g., `tot.py`) that expose callables referenced by `cfg.agents.params.entrypoint`.
 3. Extend tests (`tests/agents/`) to cover registry resolution, planner branching, and tool invocation overrides.
 4. Keep connectors discoverable through the `connector_catalog` tool so planning frameworks can dynamically request access to sources.
-5. For ingestion, use the namespace wrappers (`freshbot.pipeline.ingest_project_code/docs`) so metadata stays aligned with the ParadeDB schemas.
+5. For ingestion, use the wrappers (`freshbot.pipeline.ingest_project_code/docs`) so files are tagged with `is_dev` and routed through the modular pipeline.
 
 With this structure Freshbot stays self-contained: all runtime decisions flow from database configuration, and code changes live inside the new `src/freshbot/agents/` module family.
 
@@ -121,8 +123,7 @@ With this structure Freshbot stays self-contained: all runtime decisions flow fr
 - These scripts all expect to be executed inside the compose containers because they rely on the project’s installed dependencies and the same `DATABASE_URL`/`PYTHONPATH` wiring as the running services. Future work moves the canonical configuration source fully into ParadeDB with management flows that edit rows directly instead of syncing from YAML snapshots.
 - Install the Freshbot package inside the API container before running any loaders: `docker compose exec api pip install --no-cache-dir https://github.com/herbdankerson/freshbot/archive/refs/heads/master.zip`. Host-side virtual environments are not supported; execute from inside the container so dependencies and DSNs match production.
 
-## Project Namespaces
-- `project_code.*` – code-first mirror of the KB schema (documents, chunks, `vector(1024)` embeddings) populated by running `freshbot_document_ingest(..., target_namespace='project_code')` and pointing `target_entries` at `project_code.entries`.
-- `project_docs.*` – documentation mirror using the same layout; triggered with `target_namespace='project_docs'` and `target_entries='project_docs.entries'`.
-
-Both namespaces reuse `kb.embedding_spaces` and now maintain their own `entries` tables (created with `CREATE TABLE project_code.entries (LIKE kb.entries INCLUDING ALL)` and the equivalent for documentation) so agents can search code/doc material without polluting the main KB. The ingestion flow automatically builds hnsw indexes inside each schema the first time embeddings are written.
+## Dev Content Flags
+- All dev artefacts live in `kb.*` with `is_dev = TRUE`.
+- `kb.dev_documents_meta` tracks source paths, ingest items, and enrichment metadata for dev documents.
+- Agents that should ignore dev material add `WHERE is_dev = FALSE` or consult the meta table.

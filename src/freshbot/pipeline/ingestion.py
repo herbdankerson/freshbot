@@ -7,12 +7,49 @@ import logging
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
 from freshbot.executors import invoke_tool
+from freshbot.gateways.openai import chat_completion
 
 DEFAULT_CLASSIFIER_TOOL = "tool_qwen_chat"
 DEFAULT_GEMINI_TOOL = "tool_gemini_chat"
+LITELLM_GATEWAY_ALIAS = "connector_gemini_litellm"
+DEFAULT_EMOTION_MODEL = "emo-twitter"
+DEFAULT_SENTIMENT_MODEL = "sent-twitter"
 _DEFAULT_SUMMARY_BATCH = 8
-_CLASSIFIER_CHAR_LIMIT = 6000
-_EMOTION_CHAR_LIMIT = 800
+CLASSIFIER_CHAR_LIMIT = 6000
+EMOTION_CHAR_LIMIT = 800
+CLASSIFICATION_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "domain": {"type": "string", "enum": ["general", "law", "code"]},
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "source_labels": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["domain", "confidence"],
+    "additionalProperties": False,
+}
+EMOTION_SIGNAL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "label": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+    },
+    "additionalProperties": False,
+}
+EMOTION_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "emotion": EMOTION_SIGNAL_SCHEMA,
+        "sentiment": EMOTION_SIGNAL_SCHEMA,
+        "emotions": {
+            "type": "array",
+            "items": EMOTION_SIGNAL_SCHEMA,
+        },
+    },
+    "additionalProperties": False,
+}
 
 
 LOGGER = logging.getLogger(__name__)
@@ -91,18 +128,24 @@ def classify_document(
 ) -> Dict[str, Any]:
     """Return the primary domain classification for ``text``."""
 
-    snippet = (text or "").strip()[:_CLASSIFIER_CHAR_LIMIT]
+    snippet = (text or "").strip()[:CLASSIFIER_CHAR_LIMIT]
     system_prompt = (
         "You label content for an ingestion pipeline. Respond with compact JSON containing "
         "domain (one of ['legal','code','general']), confidence (0-1), and source_labels (array of strings)."
     )
     user_payload = json.dumps({"content": snippet}, ensure_ascii=False)
+    extra_params = {
+        "guided_json": CLASSIFICATION_JSON_SCHEMA,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
     response = run_chat_tool(
         tool_slug=tool_slug,
         agent=agent,
         system_prompt=system_prompt,
         temperature=0.0,
         max_tokens=256,
+        response_format={"type": "json_object"},
+        extra_params=extra_params,
         messages=[{"role": "user", "content": user_payload}],
     )
     content = response.get("content")
@@ -252,105 +295,151 @@ def detect_emotions(
     snippet = (text or "").strip()
     if not snippet:
         return []
-    if len(snippet) > _EMOTION_CHAR_LIMIT:
-        snippet = snippet[:_EMOTION_CHAR_LIMIT]
+    if len(snippet) > EMOTION_CHAR_LIMIT:
+        snippet = snippet[:EMOTION_CHAR_LIMIT]
 
-    system_prompt = (
-        "You analyse affect. Respond with JSON containing optional 'emotion' and 'sentiment' objects with "
-        "fields label (string) and confidence (0-1). You may also provide an 'emotions' array of additional "
-        "{label, confidence} objects."
-    )
-    payload = json.dumps({"text": snippet}, ensure_ascii=False)
-    response = run_chat_tool(
-        tool_slug=tool_slug,
+    emotion_payload = _litellm_emotion_payload(
+        snippet,
+        model_name=DEFAULT_EMOTION_MODEL,
         agent=agent,
-        system_prompt=system_prompt,
-        temperature=0.0,
-        max_tokens=256,
-        messages=[{"role": "user", "content": payload}],
     )
-    content = response.get("content")
-    try:
-        data = json.loads(content) if content else {}
-    except json.JSONDecodeError:
-        data = {}
+    sentiment_payload = _litellm_emotion_payload(
+        snippet,
+        model_name=DEFAULT_SENTIMENT_MODEL,
+        agent=agent,
+    )
 
     results: List[Dict[str, Any]] = []
-    for key in ("emotion", "sentiment"):
-        results.extend(
-            _build_signal_entries(
-                block=data.get(key),
-                signal_type=key,
-                tool_slug=tool_slug,
-            )
+    results.extend(
+        _signals_from_payload(
+            emotion_payload,
+            signal_type="emotion",
+            model_name=DEFAULT_EMOTION_MODEL,
         )
+    )
+    results.extend(
+        _signals_from_payload(
+            sentiment_payload,
+            signal_type="sentiment",
+            model_name=DEFAULT_SENTIMENT_MODEL,
+        )
+    )
 
-    extras = data.get("emotions")
+    extras = (emotion_payload or {}).get("emotions")
     if isinstance(extras, list):
         for entry in extras:
             results.extend(
-                _build_signal_entries(
-                    block=entry,
+                _signals_from_payload(
+                    entry,
                     signal_type="emotion",
-                    tool_slug=tool_slug,
+                    model_name=DEFAULT_EMOTION_MODEL,
+                    raw_payload=emotion_payload,
+                    allow_direct_entry=True,
                 )
             )
 
-    for record in results:
-        record["raw"] = data
     return results
 
 
-def _build_signal_entries(
+def _litellm_emotion_payload(
+    text: str,
     *,
-    block: Any,
+    model_name: str,
+    agent: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Invoke the LiteLLM router with an Ollama-backed classifier and return parsed JSON."""
+
+    try:
+        response = chat_completion(
+            [{"role": "user", "content": text}],
+            gateway_alias=LITELLM_GATEWAY_ALIAS,
+            model_override=model_name,
+            temperature=0.0,
+            max_tokens=128,
+            response_format={"type": "json_object"},
+            extra_params={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+    except Exception as exc:  # pragma: no cover - network failures
+        LOGGER.warning(
+            "Emotion model %s invocation failed",
+            model_name,
+            extra={"error": str(exc)},
+        )
+        return None
+
+    content = response.get("content")
+    if not content or "Stubbed response" in content:
+        LOGGER.warning(
+            "Emotion model %s yielded no usable content",
+            model_name,
+            extra={"content": content},
+        )
+        return None
+
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError as exc:
+        LOGGER.warning(
+            "Emotion model %s returned non-JSON payload",
+            model_name,
+            extra={"content": content, "error": str(exc)},
+        )
+        return None
+
+    if isinstance(payload, MutableMapping):
+        payload = dict(payload)
+        payload.setdefault("model", model_name)
+        payload.setdefault("raw_content", content)
+    return payload  # type: ignore[return-value]
+
+
+def _signals_from_payload(
+    payload: Optional[Mapping[str, Any]],
+    *,
     signal_type: str,
-    tool_slug: str,
+    model_name: str,
+    raw_payload: Optional[Mapping[str, Any]] = None,
+    allow_direct_entry: bool = False,
 ) -> List[Dict[str, Any]]:
-    if block is None:
+    """Normalise classifier JSON into the emotion signal schema."""
+
+    if payload is None:
         return []
-    if isinstance(block, list):
-        entries: List[Dict[str, Any]] = []
-        for item in block:
-            entries.extend(
-                _build_signal_entries(block=item, signal_type=signal_type, tool_slug=tool_slug)
-            )
-        return entries
-    if isinstance(block, Mapping):
-        label = str(block.get("label") or block.get("value") or "").strip()
-        confidence_raw = block.get("confidence")
-        try:
-            confidence = float(confidence_raw) if confidence_raw is not None else None
-        except (TypeError, ValueError):
-            confidence = None
-        record: Dict[str, Any] = {
-            "type": signal_type,
-            "alias": tool_slug,
-            "model": tool_slug,
-            "raw": block,
-        }
-        if label:
-            record["label"] = label
-        if confidence is not None:
-            record["confidence"] = confidence
-        return [record]
-    value = str(block).strip()
-    if not value:
+
+    data = dict(payload)
+    raw_payload = raw_payload or data
+
+    if allow_direct_entry and {"label", "confidence"} <= data.keys():
+        label = data.get("label")
+        confidence = data.get("confidence")
+    else:
+        label = data.get(signal_type) or data.get("label")
+        confidence = data.get("confidence")
+
+    if not label:
         return []
-    return [
-        {
-            "type": signal_type,
-            "alias": tool_slug,
-            "model": tool_slug,
-            "label": value,
-        }
-    ]
+    try:
+        confidence_val = float(confidence) if confidence is not None else None
+    except (TypeError, ValueError):
+        confidence_val = None
+
+    signal = {
+        "type": signal_type,
+        "label": str(label),
+        "model": model_name,
+        "raw": raw_payload,
+    }
+    if confidence_val is not None:
+        signal["confidence"] = confidence_val
+    return [signal]
 
 
 __all__ = [
     "ChatToolError",
     "DEFAULT_CLASSIFIER_TOOL",
     "DEFAULT_GEMINI_TOOL",
+    "CLASSIFICATION_JSON_SCHEMA",
+    "EMOTION_JSON_SCHEMA",
     "classify_document",
     "detect_emotions",
     "run_chat_tool",

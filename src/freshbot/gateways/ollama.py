@@ -73,6 +73,13 @@ def embed_code_texts(
     gateway = load_gateway(gateway_alias)
     endpoint = gateway.endpoint.rstrip("/")
     target_dims = gateway.config.get("dims") or gateway.default_params.get("dims")
+    api_style = (
+        str(gateway.config.get("api_style"))
+        if gateway.config.get("api_style") is not None
+        else str(gateway.default_params.get("api_style"))
+        if gateway.default_params.get("api_style") is not None
+        else "ollama"
+    ).lower()
     if not _embeddings_enabled():
         dims = int(target_dims) if target_dims else 1536
         logger.warning(
@@ -89,7 +96,20 @@ def embed_code_texts(
     vectors: List[List[float]] = []
     with httpx.Client(timeout=timeout) as client:
         for text in texts:
-            payload = _resolve_payload(gateway, text=text)
+            if api_style == "openai":
+                payload = {
+                    "model": gateway.config.get("model")
+                    or gateway.default_params.get("model"),
+                    "input": text,
+                }
+                for key, value in gateway.config.get("request_overrides", {}).items():
+                    payload.setdefault(key, value)
+                for key, value in gateway.default_params.get(
+                    "request_overrides", {}
+                ).items():
+                    payload.setdefault(key, value)
+            else:
+                payload = _resolve_payload(gateway, text=text)
             gateway.validate_request(payload)
 
             response = client.post(endpoint, json=payload)
@@ -100,7 +120,15 @@ def embed_code_texts(
                     f"Gateway '{gateway.alias}' returned non-object payload: {data!r}"
                 )
             gateway.validate_response(data)
-            embedding = data.get("embedding")
+            if api_style == "openai":
+                data_entries = data.get("data")
+                if not isinstance(data_entries, Sequence) or not data_entries:
+                    raise ValueError(
+                        f"Gateway '{gateway.alias}' response missing embedding data"
+                    )
+                embedding = data_entries[0].get("embedding")
+            else:
+                embedding = data.get("embedding")
             if not isinstance(embedding, Iterable):
                 raise ValueError(
                     f"Gateway '{gateway.alias}' response missing embedding vector"

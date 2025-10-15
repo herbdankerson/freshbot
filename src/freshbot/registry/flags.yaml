@@ -1,0 +1,36 @@
+flags:
+  - name: is_document
+    description: Flag entries that represent primary document content.
+    default_value: false
+    metadata:
+      category: ingest
+
+  - name: is_note
+    description: Flag entries that represent contextual notes or annotations.
+    default_value: false
+    metadata:
+      category: ingest
+
+  - name: is_chat
+    description: Flag entries originating from chat transcripts.
+    default_value: false
+    metadata:
+      category: ingest
+
+  - name: needs_metadata
+    description: Flag entries that require metadata backfill or manual review.
+    default_value: false
+    metadata:
+      category: ingest
+
+  - name: workspace_file
+    description: Flag documents sourced directly from the workspace filesystem.
+    default_value: false
+    metadata:
+      category: workspace
+
+  - name: is_dev
+    description: Flag artefacts that belong to the development knowledge base.
+    default_value: true
+    metadata:
+      category: ingest

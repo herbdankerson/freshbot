@@ -23,8 +23,8 @@ def test_ingest_project_code_wraps_flow(tmp_path, monkeypatch):
 
     assert result == {"status": "succeeded"}
 
-    assert captured["target_namespace"] == "project_code"
-    assert captured["target_entries"] == "project_code.entries"
+    assert captured["target_namespace"] == "kb"
+    assert captured["target_entries"] == "kb.entries"
     assert captured["display_name"] == "example.py"
 
     payload = base64.b64decode(captured["content_b64"].encode("ascii"))
@@ -34,7 +34,9 @@ def test_ingest_project_code_wraps_flow(tmp_path, monkeypatch):
     assert metadata["source"]["relative_path"] == "example.py"
     assert metadata["source"]["category"] == "code"
     assert metadata["source"]["language"] == "python"
-    assert metadata["freshbot"]["namespace"] == "project_code"
+    assert metadata["freshbot"]["namespace"] == "kb"
+    assert metadata["freshbot"]["is_dev"] is True
+    assert metadata["is_dev"] is True
     assert metadata["tags"] == ["demo"]
 
 
@@ -55,5 +57,7 @@ def test_ingest_project_docs_sets_docs_category(tmp_path, monkeypatch):
     metadata = captured["extra_metadata"]
     assert metadata["source"]["category"] == "docs"
     assert metadata["freshbot"]["category"] == "docs"
-    assert captured["target_namespace"] == "project_docs"
-    assert captured["target_entries"] == "project_docs.entries"
+    assert metadata["freshbot"]["namespace"] == "kb"
+    assert captured["target_namespace"] == "kb"
+    assert captured["target_entries"] == "kb.entries"
+    assert metadata["freshbot"]["is_dev"] is True

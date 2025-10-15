@@ -1,61 +1,116 @@
-# Project-Focused Ingestion Snapshot
+# Project Ingestion Overview
 
-> **Run inside docker**: Execute all ingestion commands from a running compose container (e.g. `docker compose exec prefect-worker python ...`). Host-side runs cannot reach Prefect, ParadeDB, or the TEI gateways and will fall back to stubbed embeddings.
+> **Run inside Docker.** Execute all ingestion commands from a compose container (for example `docker compose exec prefect-worker python ...`). Host-side runs cannot reach Prefect, ParadeDB, or the embedding gateways and will fall back to stubbed behaviour.
 
-## Database Tables
-- `project_code.documents` – mirror of `kb.documents` for source code artefacts; linked tables: `project_code.chunks`, `project_code.chunk_embeddings`, `project_code.document_embeddings`.
-- `project_docs.documents` – mirror of `kb.documents` for documentation; linked tables: `project_docs.chunks`, `project_docs.chunk_embeddings`, `project_docs.document_embeddings`.
-- Embedding columns use `vector(1024)` to stay compatible with ParadeDB and hnsw indexes. Indices are created automatically by the pipeline when embeddings are written.
+## Storage Model
 
-## Test Ingests (2025-10-12)
-| Target | Ingest Item | Source | Chunks | Embedding Spaces | Notes |
-|--------|-------------|--------|--------|------------------|-------|
-| `project_code` | `3f3b24d3-34b9-42f8-b4a3-59e484956bec` | `src/my_agentic_chatbot/runtime_config.py` | 3 | `emb-general` | Live run from inside `prefect-worker` with TEI online; embeddings contain non-zero values (e.g. `[-0.0032, -0.0155, -0.0203, …]`). |
-| `project_docs` | `f5029438-682f-4538-975a-bb1314a6a147` | `project-docs/task.md` | 7 | `emb-general` | Live run via docker with TEI; embeddings populated (sample `[-0.0171, 0.0079, -0.0155, …]`). |
+Project artefacts now land in the primary `kb.*` tables. Dev-specific content is flagged with `is_dev = TRUE` instead of being written to separate schemas. Legacy schemas (`project_code.*`, `project_docs.*`) are dropped automatically by the schema migration so fresh deployments never see the stale tables. Companion tables provide audit metadata:
 
-During the container run we mounted the Freshbot package inside `prefect-worker` (`PYTHONPATH=/tmp/freshbot:/tmp/freshbot/src:/app/src:/app`) so `etl.tasks.model_clients` could import `src.freshbot.*`. Install or copy the package into the container before invoking the flow if it is missing.
-
-Column counts confirm the resulting inserts across the alternate namespaces:
+- `kb.dev_documents_meta` – source bookkeeping, classification provenance, ingest metadata.
+- `kb.ingest_flow_runs` – one row per Prefect ingestion run with parameters, status, and runtime telemetry.
 
 ```sql
-SELECT COUNT(*) FROM project_code.documents;           -- 2
-SELECT COUNT(*) FROM project_code.chunks;              -- 4
-SELECT COUNT(*) FROM project_code.chunk_embeddings;    -- 4
-SELECT COUNT(*) FROM project_code.entries;             -- 3
-SELECT COUNT(*) FROM project_docs.documents;           -- 2
-SELECT COUNT(*) FROM project_docs.chunk_embeddings;    -- 8
-SELECT COUNT(*) FROM project_docs.entries;             -- 7
+SELECT is_dev, COUNT(*) FROM kb.documents GROUP BY 1;
+SELECT document_id, source_uri, file_name, domain, domain_confidence, classifier_source
+FROM kb.dev_documents_meta
+ORDER BY updated_at DESC
+LIMIT 10;
 ```
 
-## Agent Type Sanity Checks
-Quick calls against the new agent types (with the same gateway fallback) produce stubbed responses while remote LLMs are offline:
+This keeps the schema uncluttered while allowing agents to exclude development material with a simple `WHERE is_dev = FALSE`.
 
-- `freshbot-base-agent` → `"Stubbed response (gateway unavailable)"`
-- `freshbot-thinking-agent` → steps `[]`, final `"Stubbed response (gateway unavailable)"`
-- `freshbot-deep-thinking` → best path `[]`, final `"Stubbed response (gateway unavailable)"`
+## Flow Building Blocks
 
-Once Qwen is reachable these entrypoints will surface real plans thanks to the same runtime wiring.
+Every ingestion stage ships as an individual Prefect flow so we can remix them as needed:
 
-The dedicated `project_code.entries` and `project_docs.entries` tables were created with `CREATE TABLE ... LIKE kb.entries INCLUDING ALL` so downstream agents can read project-specific responses without polluting the primary KB.
+| Flow Name | Description |
+|-----------|-------------|
+| `freshbot-register-ingest-item` | Persist ingest bookkeeping and mark `is_dev`. |
+| `freshbot-acquire-source` | Load raw bytes from disk or remote URIs. |
+| `freshbot-docling-normalize` | Convert documents via Docling. |
+| `freshbot-code-normalize` | Decode source files without Docling. |
+| `freshbot-doc-chunk` | Chunk Docling output with heading-aware splits. |
+| `freshbot-code-chunk` | Chunk code using universal-ctags, with line-based fallback. |
+| `freshbot-classify-domain` | Extension-first domain classifier with Qwen fallback. |
+| `freshbot-summarize-document` | Gemini Flash document synopsis (no chunk summaries). |
+| `freshbot-embed-chunks` | Generate chunk embeddings (general/legal/code). |
+| `freshbot-detect-emotions` | Optional sentiment tagging for downstream routing. |
+| `freshbot-build-abstractions` | Coarse abstractions used by retrieval. |
+| `freshbot-persist-ingest` | Write documents, chunks, embeddings, and metadata back to ParadeDB. |
 
-## Wrapper helpers
-- Code artefacts: `freshbot.pipeline.ingest_project_code(path, source_root=...)`
-- Documentation artefacts: `freshbot.pipeline.ingest_project_docs(path, source_root=...)`
+The compiled pipelines expose convenient entry points:
 
-Both wrappers add file metadata (`source.filename`, `source.relative_path`, `source.category`, `source.language`) and point the flow at the correct namespace/entries table. They return the same payload as `freshbot_document_ingest`. Install the package inside the compose `api` container (see “Container-only execution”) before invoking the wrappers so imports resolve.
+- `freshbot-ingest-pipeline` – raw lego box; accepts namespace, entries table, and `is_dev`.
+- `freshbot-ingest-general` – normal documents (`kb.*`, Docling chunking).
+- `freshbot-ingest-law` – legal documents (`kb.*`, Docling chunking, legal flagging).
+- `freshbot-ingest-code` – source code (ctags chunking, code embeddings).
+- `freshbot_document_ingest` – legacy wrapper that now delegates to the modular pipeline.
 
-## Supporting scripts
-- `python -m freshbot.devtools.registry_loader --apply` keeps ParadeDB’s `cfg.*` tables aligned with the definitions under `src/freshbot/registry/`. It performs schema-aware upserts and must run from a compose container so the correct dependencies and environment variables are loaded.
-- `python -m freshbot.devtools.table_loader --table project_code.entries --rows path/to/rows.yaml` is the generic seeding path for any table; it introspects the live schema, validates the YAML payload, and inserts or updates rows while preserving existing UUIDs.
-- `python -m freshbot.devtools.prefect_loader` (experimental) will register Prefect deployments straight from code. Use it once the flows are packaged so workers stay in sync with the repo.
+All flows are registered in `freshbot/src/freshbot/flows/flows.yaml` so Prefect deployments stay in sync.
 
-These utilities currently read from YAML snapshots; longer-term we plan to manage configuration purely through ParadeDB rows and scripted edits instead of editing files directly.
+## Wrapper Helpers
 
-### Container-only execution
-- Install Freshbot inside the `api` container (`docker compose exec api pip install --no-cache-dir https://github.com/herbdankerson/freshbot/archive/refs/heads/master.zip`) before running any loader or flow commands. Skip host-side virtual environments—the compose stack is the single source of truth for dependencies and database access.
-- Run loaders with the required environment variables set, for example:
-  `docker compose exec api env LITELLM_BASE_URL=http://litellm:4000 LITELLM_VIRTUAL_KEY=dev-placeholder-key NEO4J_USER=neo4j DATABASE_URL=postgresql://agent:agentpass@paradedb:5432/agentdb python -m freshbot.devtools.registry_loader --registry-dir /usr/local/lib/python3.12/site-packages/freshbot/registry --apply`
+`freshbot.pipeline.project_ingest` exposes convenience wrappers that set the right metadata and mark artefacts as dev-only:
 
-## Follow-ups
-1. Keep the TEI (`tei-gte-large`, `tei-legal`) services running in the compose stack; future host-side runs will break back to stub vectors.
-2. Backfill historic artefacts by re-running `freshbot_document_ingest` with `target_namespace='project_code'`/`'project_docs'` for each repository batch.
+- `ingest_project_code(path, source_root=...)`
+- `ingest_project_docs(path, source_root=...)`
+
+Both call `freshbot_document_ingest` with `is_dev=True`, store the relative path, tag the source as `code`/`docs`, and copy any extra metadata you provide.
+
+## Classification & Chunking Rules
+
+1. **Domain detection**: extensions determine obvious code files. Everything else is classified by Qwen 3 using the first 10 chunks plus the filename.
+2. **Chunking**:
+   - Code → universal-ctags, with metadata stored on each chunk (`chunk.metadata["ctags"]`).
+   - General/Law → Docling sections + sentence-aware splitting.
+3. **Summaries**: only document-level Gemini summaries are produced (chunk summaries are skipped).
+
+## Running a Dev Ingest
+
+```bash
+docker compose exec prefect-worker python - <<'PY'
+from pathlib import Path
+from freshbot.pipeline import project_ingest
+
+root = Path("/workspace/freshbot")
+project_ingest.ingest_project_code(root / "src/freshbot/flows/ingest/steps.py", source_root=root)
+project_ingest.ingest_project_docs(root / "README.md", source_root=root)
+PY
+```
+
+Verify the results:
+
+```sql
+SELECT file_name, is_dev, domain
+FROM kb.documents
+WHERE is_dev
+ORDER BY updated_at DESC
+LIMIT 5;
+
+SELECT document_id,
+       domain,
+       domain_confidence,
+       classifier_source,
+       extra->'classification'
+FROM kb.dev_documents_meta
+ORDER BY updated_at DESC
+LIMIT 5;
+
+SELECT flow_name,
+       status,
+       started_at,
+       finished_at,
+       parameters
+FROM kb.ingest_flow_runs
+ORDER BY started_at DESC
+LIMIT 5;
+```
+
+## Supporting Scripts
+
+- `python -m freshbot.devtools.registry_loader --apply` keeps `cfg.*` tables aligned with the registry definitions.
+- `python -m freshbot.devtools.table_loader --table kb.documents --rows /path/to/dev.yaml` offers schema-aware bulk upserts when flows are overkill.
+- `python -m freshbot.devtools.prefect_loader` registers or updates Prefect deployments in one shot.
+- `python intellibot/ops/scripts/migrate.py` reapplies the schema (drops legacy schemas, ensures dev columns/meta) whenever ParadeDB is reset.
+
+Always run these scripts inside the compose environment so DNS (`paradedb`) and credentials resolve correctly.

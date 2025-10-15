@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import base64
 from typing import Dict, Optional
+
 try:  # pragma: no cover - Prefect optional for CLI usage
     from prefect import flow, get_run_logger
 except Exception:  # pragma: no cover - fallback for local tooling
@@ -21,7 +21,6 @@ except Exception:  # pragma: no cover - fallback for local tooling
         return logging.getLogger(__name__)
 
 try:
-    from etl.flows.flow_document_intake import document_intake_flow
     from etl.tasks.intake_models import FlowReport, IngestItem
 except Exception:
     class FlowReport:
@@ -36,22 +35,8 @@ except Exception:
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
 
-    def _missing_document_intake_flow(*_, **__):
-        raise RuntimeError(
-            "document_intake_flow is unavailable. Run inside the compose container "
-            "or install the Intellibot ETL package."
-        )
-
-    class _DocFlowProxy:
-        def with_options(self, **__):
-            return _missing_document_intake_flow
-
-        def __call__(self, *args, **kwargs):
-            return _missing_document_intake_flow(*args, **kwargs)
-
-    document_intake_flow = _DocFlowProxy()
-
 from ..connectors.catalog import lookup as list_connectors
+from .ingest.pipeline import ingest_pipeline_flow
 
 
 @flow(name="freshbot_document_ingest")
@@ -64,6 +49,7 @@ def freshbot_document_ingest(
     extra_metadata: Optional[Dict[str, object]] = None,
     target_namespace: str = "kb",
     target_entries: Optional[str] = None,
+    is_dev: bool = False,
 ) -> Dict[str, object]:
     """Ingest a document into the knowledge base using the Freshbot pipeline."""
 
@@ -71,21 +57,16 @@ def freshbot_document_ingest(
     connectors = {entry["alias"]: entry for entry in list_connectors()}
     logger.info("Active connectors: %s", sorted(connectors))
 
-    payload: Optional[bytes] = None
-    if content_b64:
-        payload = base64.b64decode(content_b64)
-        logger.info("Decoded %s bytes of payload for %s", len(payload), display_name)
-
-    logger.info("Delegating to legacy document intake flow")
-    subflow = document_intake_flow.with_options(name="legacy_document_intake")
-    report: FlowReport = subflow(
+    report: FlowReport = ingest_pipeline_flow(
         source_type=source_type,
         source_uri=source_uri,
         display_name=display_name,
-        content=payload,
+        content_b64=content_b64,
         extra_metadata=extra_metadata,
         target_namespace=target_namespace,
         target_entries=target_entries,
+        is_dev=is_dev,
+        classifier_agent=None,
     )
 
     ingest_item: IngestItem = report.ingest_item

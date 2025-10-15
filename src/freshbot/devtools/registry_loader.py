@@ -37,6 +37,7 @@ class RegistryDefinitions:
     agents: Sequence[Mapping[str, Any]]
     agent_tools: Sequence[Mapping[str, Any]]
     prompts: Sequence[Mapping[str, Any]]
+    flags: Sequence[Mapping[str, Any]]
 
 
 def resolve_env_tokens(payload: Any) -> Any:
@@ -108,6 +109,7 @@ def load_definitions(root: Path) -> RegistryDefinitions:
         agents=load_section(root / "agents.yaml", "agents"),
         agent_tools=load_section(root / "agent_tools.yaml", "agent_tools"),
         prompts=load_section(root / "prompts.yaml", "prompts"),
+        flags=load_section(root / "flags.yaml", "flags"),
     )
 
 
@@ -433,6 +435,38 @@ def upsert_prompts(connection: Connection, prompts: Sequence[Mapping[str, Any]])
         connection.execute(stmt, params)
 
 
+def upsert_flags(connection: Connection, flags: Sequence[Mapping[str, Any]]) -> None:
+    if not flags:
+        return
+
+    stmt = text(
+        """
+        INSERT INTO cfg.flags (name, description, default_value, enabled, metadata)
+        VALUES (:name, :description, :default_value, :enabled, CAST(:metadata AS jsonb))
+        ON CONFLICT (name) DO UPDATE SET
+            description = EXCLUDED.description,
+            default_value = EXCLUDED.default_value,
+            enabled = EXCLUDED.enabled,
+            metadata = EXCLUDED.metadata,
+            updated_at = NOW()
+        """
+    )
+
+    for entry in flags:
+        name = entry.get("name")
+        if not name:
+            raise ValueError("Flag entries require a 'name'")
+        params = {
+            "name": name,
+            "description": entry.get("description"),
+            "default_value": bool(entry.get("default_value", False)),
+            "enabled": bool(entry.get("enabled", True)),
+            "metadata": _json_dumps(entry.get("metadata")),
+        }
+        LOGGER.info("Upserting flag %s", name)
+        connection.execute(stmt, params)
+
+
 def apply_registry(definitions: RegistryDefinitions, engine: Engine, apply: bool) -> None:
     connection = engine.connect()
     transaction = connection.begin()
@@ -443,6 +477,7 @@ def apply_registry(definitions: RegistryDefinitions, engine: Engine, apply: bool
         agent_ids = upsert_agents(connection, definitions.agents)
         upsert_agent_tools(connection, definitions.agent_tools, agent_ids, tool_ids)
         upsert_prompts(connection, definitions.prompts)
+        upsert_flags(connection, definitions.flags)
         if apply:
             transaction.commit()
             LOGGER.info("Registry changes committed.")

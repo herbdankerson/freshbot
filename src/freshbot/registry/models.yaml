@@ -100,7 +100,7 @@ models:
   provider: ollama
   purpose: embedding
   endpoint: http://ollama:11434/api/embeddings
-  dims: 1536
+  dims: 1024
   default_params:
     gateway_alias: connector_ollama_code_embedding
     connector_type: embedding

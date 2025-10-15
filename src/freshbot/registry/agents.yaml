@@ -128,6 +128,11 @@ agents:
       include_toolbox: true
       temperature: 0.25
       max_tokens: 512
+    generation:
+      response_mime_type: text/plain
+      max_output_tokens: 768
+      thinking_mode: disabled
+      thinking_budget_tokens: 256
   db_scope:
   - kb.entries
   enabled: true
@@ -146,6 +151,11 @@ agents:
       include_toolbox: true
       max_steps: 5
       temperature: 0.2
+    generation:
+      response_mime_type: text/plain
+      max_output_tokens: 1024
+      thinking_mode: dynamic
+      thinking_budget_tokens: 2048
   db_scope:
   - kb.entries
   enabled: true
@@ -166,6 +176,11 @@ agents:
       rollouts: 6
       max_depth: 3
       temperature: 0.3
+    generation:
+      response_mime_type: text/plain
+      max_output_tokens: 1536
+      thinking_mode: dynamic
+      thinking_budget_tokens: 4096
   db_scope:
   - kb.entries
   enabled: true

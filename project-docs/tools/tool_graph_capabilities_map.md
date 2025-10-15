@@ -1,0 +1,1 @@
+../../intellibot/project-docs/tools/tool_graph_capabilities_map.md

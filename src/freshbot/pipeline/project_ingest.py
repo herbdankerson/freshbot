@@ -18,24 +18,28 @@ class NamespaceBinding:
     namespace: str
     entries_table: Optional[str]
     category: str
+    is_dev: bool = False
 
     def flow_kwargs(self) -> Dict[str, Optional[str]]:
         return {
             "target_namespace": self.namespace,
             "target_entries": self.entries_table,
+            "is_dev": self.is_dev,
         }
 
 
 PROJECT_CODE_BINDING = NamespaceBinding(
-    namespace="project_code",
-    entries_table="project_code.entries",
+    namespace="kb",
+    entries_table="kb.entries",
     category="code",
+    is_dev=True,
 )
 
 PROJECT_DOCS_BINDING = NamespaceBinding(
-    namespace="project_docs",
-    entries_table="project_docs.entries",
+    namespace="kb",
+    entries_table="kb.entries",
     category="docs",
+    is_dev=True,
 )
 
 
@@ -110,7 +114,7 @@ def ingest_project_code(
     extra_metadata: Optional[Mapping[str, Any]] = None,
     source_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Ingest a code artefact into the ``project_code`` namespace."""
+    """Ingest a code artefact flagged as dev content inside ``kb``."""
 
     return ingest_path(
         path,
@@ -128,7 +132,7 @@ def ingest_project_docs(
     extra_metadata: Optional[Mapping[str, Any]] = None,
     source_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Ingest a documentation artefact into the ``project_docs`` namespace."""
+    """Ingest a documentation artefact flagged as dev content inside ``kb``."""
 
     return ingest_path(
         path,
@@ -167,7 +171,9 @@ def _compose_metadata(
             "namespace": binding.namespace,
             "entries_table": binding.entries_table,
             "category": binding.category,
+            "is_dev": binding.is_dev,
         },
+        "is_dev": binding.is_dev,
     }
 
     if extra_metadata:
