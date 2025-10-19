@@ -1,0 +1,27 @@
+embedding_profiles:
+  - model_alias: emb-general
+    space_name: emb-general
+    native_dims: 4096
+    storage_dims: 4096
+    max_context_tokens: 8192
+    batch_size: 1
+    task: search_document
+    api_style: openai
+    notes: NV-Embed general embedding profile
+  - model_alias: emb-legal
+    space_name: emb-legal
+    native_dims: 768
+    storage_dims: 768
+    max_context_tokens: 8192
+    batch_size: 4
+    task: search_document
+    api_style: openai
+    notes: Legal domain embedding profile
+  - model_alias: emb-code
+    space_name: emb-code
+    native_dims: 3584
+    storage_dims: 3584
+    max_context_tokens: 450
+    batch_size: 16
+    api_style: openai
+    notes: Code embedding profile via llama-server

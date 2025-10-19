@@ -81,7 +81,7 @@ def embed_code_texts(
         else "ollama"
     ).lower()
     if not _embeddings_enabled():
-        dims = int(target_dims) if target_dims else 1536
+        dims = int(target_dims) if target_dims else 3584
         logger.warning(
             "Code embeddings disabled (set %s=1 to enable); returning zero vectors of length %s",
             _EMBED_ENABLE_FLAG,

@@ -89,7 +89,7 @@ tools:
           type: integer
         dimensions:
           type: integer
-  notes: Produces 1536-dimension embeddings for code-aware retrieval.
+  notes: Produces 3584-dimension embeddings for code-aware retrieval.
 - slug: tool_kb_search
   kind: native
   manifest_or_ref: freshbot.flows.tools:kb_search_tool

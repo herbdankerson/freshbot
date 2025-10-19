@@ -38,6 +38,7 @@ class RegistryDefinitions:
     agent_tools: Sequence[Mapping[str, Any]]
     prompts: Sequence[Mapping[str, Any]]
     flags: Sequence[Mapping[str, Any]]
+    embedding_profiles: Sequence[Mapping[str, Any]]
 
 
 def resolve_env_tokens(payload: Any) -> Any:
@@ -110,6 +111,7 @@ def load_definitions(root: Path) -> RegistryDefinitions:
         agent_tools=load_section(root / "agent_tools.yaml", "agent_tools"),
         prompts=load_section(root / "prompts.yaml", "prompts"),
         flags=load_section(root / "flags.yaml", "flags"),
+        embedding_profiles=load_section(root / "embedding_profiles.yaml", "embedding_profiles"),
     )
 
 
@@ -254,6 +256,79 @@ def upsert_models(
         model_ids[record["alias"]] = record["id"]
 
     return model_ids
+
+
+def upsert_embedding_profiles(connection: Connection, profiles: Sequence[Mapping[str, Any]]) -> None:
+    if not profiles:
+        return
+
+    stmt = text(
+        """
+        INSERT INTO cfg.embedding_profiles (
+            model_alias,
+            space_name,
+            native_dims,
+            storage_dims,
+            max_context_tokens,
+            batch_size,
+            task,
+            api_style,
+            truncate_strategy,
+            request_overrides,
+            notes
+        )
+        VALUES (
+            :model_alias,
+            :space_name,
+            :native_dims,
+            :storage_dims,
+            :max_context_tokens,
+            :batch_size,
+            :task,
+            :api_style,
+            :truncate_strategy,
+            CAST(:request_overrides AS jsonb),
+            :notes
+        )
+        ON CONFLICT (model_alias) DO UPDATE SET
+            space_name = EXCLUDED.space_name,
+            native_dims = EXCLUDED.native_dims,
+            storage_dims = EXCLUDED.storage_dims,
+            max_context_tokens = EXCLUDED.max_context_tokens,
+            batch_size = EXCLUDED.batch_size,
+            task = EXCLUDED.task,
+            api_style = EXCLUDED.api_style,
+            truncate_strategy = EXCLUDED.truncate_strategy,
+            request_overrides = EXCLUDED.request_overrides,
+            notes = EXCLUDED.notes,
+            updated_at = NOW()
+        """
+    )
+
+    for entry in profiles:
+        alias = entry.get("model_alias")
+        if not alias:
+            raise ValueError("Embedding profile missing 'model_alias'")
+        space_name = entry.get("space_name", alias)
+        native_dims = entry.get("native_dims")
+        storage_dims = entry.get("storage_dims")
+        if not native_dims or not storage_dims:
+            raise ValueError(f"Embedding profile '{alias}' requires native_dims and storage_dims")
+        params = {
+            "model_alias": alias,
+            "space_name": space_name,
+            "native_dims": native_dims,
+            "storage_dims": storage_dims,
+            "max_context_tokens": entry.get("max_context_tokens"),
+            "batch_size": entry.get("batch_size"),
+            "task": entry.get("task"),
+            "api_style": entry.get("api_style"),
+            "truncate_strategy": entry.get("truncate_strategy"),
+            "request_overrides": _json_dumps(entry.get("request_overrides")),
+            "notes": entry.get("notes"),
+        }
+        LOGGER.info("Upserting embedding profile %s", alias)
+        connection.execute(stmt, params)
 
 
 def _fetch_existing_tools(connection: Connection) -> Dict[str, int]:
@@ -473,6 +548,7 @@ def apply_registry(definitions: RegistryDefinitions, engine: Engine, apply: bool
     try:
         provider_ids = upsert_providers(connection, definitions.providers)
         model_ids = upsert_models(connection, definitions.models, provider_ids)
+        upsert_embedding_profiles(connection, definitions.embedding_profiles)
         tool_ids = upsert_tools(connection, definitions.tools)
         agent_ids = upsert_agents(connection, definitions.agents)
         upsert_agent_tools(connection, definitions.agent_tools, agent_ids, tool_ids)

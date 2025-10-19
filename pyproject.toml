@@ -17,6 +17,7 @@ dependencies = [
     "pyyaml>=6.0",
     "fastmcp>=2.12.3",
     "neo4j>=5.18.0",
+    "qdrant-client>=1.9.0",
 ]
 
 [project.optional-dependencies]

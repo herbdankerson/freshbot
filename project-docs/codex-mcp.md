@@ -12,7 +12,7 @@ Codex MCP exposes ParadeDB-backed tools for reading, searching, and editing proj
   - `CODEX_CODE_ROOTS` (optional): semicolon/comma separated additional roots for locating files.
   - `CODEX_MCP_PUBLIC_ENDPOINT` (optional): manifest endpoint override.
   - `CODEX_UPLOAD_ROOT` (optional): base directory for uploaded files (defaults to the first `CODEX_CODE_ROOTS` entry or `/workspace`).
-- **Profiles**: All legacy MCP servers and the shared Cloudflare tunnel now sit behind the `mcp-legacy` compose profile. Leave that profile disabled to keep Codex local-only; start it explicitly when you need the older toolboxes or remote exposure (e.g. `docker compose --profile mcp-legacy up -d legal-mcp`).
+- **Profiles**: All legacy MCP servers and the shared Cloudflare tunnel now sit behind the `mcp-legacy`/`network` compose profile (also accessible via `intellibot/ops/scripts/network_stack.sh`). Keep it idle for local-only work; start it when you need the older toolboxes or remote exposure (for example `docker compose --profile network up -d legal-mcp` from the `intellibot/` root).
 - **Health check**: `curl http://localhost:8105/.well-known/mcp.json` should return the FastMCP manifest if the server is up.
 
 ## Tools
@@ -49,7 +49,9 @@ Codex MCP now exposes a full project knowledge and task-management surface. Tool
 | `set_task_dependencies` | Replace a task’s dependency list, rebuild DAG edges, and refresh task docs. |
 | `mark_task_complete` | Enforce dependency checks, capture a required summary, ingest completion notes, and update docs. |
 | `delete_task` | Archive a task, remove DAG edges, ingest the updated doc, and log the archive reason. |
-| `upload_dag` | Parse DAG markdown (`TASK-A -> TASK-B`), sync `task.dag_edges`, ingest the DAG doc, and mirror to Neo4j. |
+| `upload_project_plan` | Parse plan markdown (`TASK-A -> TASK-B`), sync `task.dag_edges`, ingest the plan doc, and mirror to Neo4j. |
+| `update_project_plan` | Re-ingest plan markdown changes, reapply dependency edges, and mirror to Neo4j. |
+| `materialize_goap_plan` | Execute the GOAP planner to generate tasks, ingest a plan note, and sync the project DAG. |
 | `sync_task_document` | Re-run the task registry parser for a KB document (inline Prefect flow). |
 
 Scopes remain logical views over the shared `kb.*` tables:
@@ -63,7 +65,7 @@ Writes are automatically constrained to dev artefacts (`is_dev = true`) regardle
 ### Prefect interaction
 - `add_task`, `mark_task_complete`, and `delete_task` call `_prefect_ingest_document` which schedules `freshbot_document_ingest/freshbot-document-ingest` (override via `CODEX_TASK_DOC_DEPLOYMENT`). Each run records telemetry to `kb.ingest_flow_runs`, updates embeddings, and appends task activity entries with `prefect_run_id`.
 - `ingest_document` wraps the same deployment for arbitrary filesystem paths, applying `cfg.flags`, reference extraction, and optional background execution.
-- `upload_dag` schedules both the ingest deployment (override `CODEX_DAG_DOC_DEPLOYMENT`) and `task-sync-neo4j/freshbot-task-graph-sync` (override `CODEX_TASK_GRAPH_DEPLOYMENT`) so ParadeDB and Neo4j stay aligned.
+- `upload_project_plan`/`update_project_plan` schedule both the ingest deployment (override `CODEX_DAG_DOC_DEPLOYMENT`) and `task-sync-neo4j/freshbot-task-graph-sync` (override `CODEX_TASK_GRAPH_DEPLOYMENT`) so ParadeDB and Neo4j stay aligned.
 - `sync_task_document` invokes the `task-sync-from-kb` Prefect flow inline (no remote scheduling) to parse/regenerate project/task rows from an existing KB document.
 
 Monitor Prefect runs via `prefect deployment ls` / `prefect flow-run ls` or by querying `kb.ingest_flow_runs`. Graph sync attempts are recorded in `task.graph_sync_runs` (project key, deployment, flow run id, status, message) for alerting and audit trails. Neo4j mirroring can be verified with `MATCH (t:Task)-[:DEPENDS_ON]->(d:Task) RETURN t.task_key, d.task_key`.
@@ -100,6 +102,7 @@ For quick smoke-tests (or simple curl usage) the server exposes REST-style wrapp
 - `POST /tools/mark-task-complete` with JSON `{ "task_key": "TASK-TASK-MANAGER-POC", "summary": "Verified ingestion end-to-end." }`
 - `POST /tools/delete-task` with JSON `{ "task_key": "TASK-TASK-MANAGER-POC" }`
 - `POST /tools/upload-dag` with JSON `{ "project_key": "DEV-TASK-SYSTEM-20241001", "content": "- TASK-A -> TASK-B" }`
+- `POST /tools/materialize-goap-plan` with JSON `{ "project_key": "PROJECT-GOAP", "goal": "Ship release" }`
 - `POST /tools/sync-task-document` with JSON `{ "document_id": "<uuid>", "is_dev": true }`
 
 These routes call the same logic as the MCP tools, so results mirror what an MCP client would see. Use `CODEX_UPLOAD_ROOT`/`CODEX_CODE_ROOTS` to control where uploaded files land; the default is `/workspace`, which maps to the host repo root under compose.
@@ -146,10 +149,10 @@ The stack already fronts MCP services with lightweight Nginx proxies so that a s
 
    The proxy directory naming keeps everything self-discoverable—the relay container mounts each `manifest.json` into `/etc/nginx/manifests/<name>.json` and places the server block from `nginx.conf` in front of the upstream MCP instance.
 
-2. **Mount the new proxy.** Update `intellibot/docker-compose.yml` (service `mcp-relay` or whichever shared gateway you are running) to bind-mount the new files, following the same pattern as `ops/mcp/neo4j-*`. Rebuild or restart the gateway container with the legacy profile enabled: `docker compose --profile mcp-legacy up -d mcp-relay`.
+2. **Mount the new proxy.** Update `intellibot/docker-compose.yml` (service `mcp-relay` or whichever shared gateway you are running) to bind-mount the new files, following the same pattern as `ops/mcp/neo4j-*`. Rebuild or restart the gateway container with the network profile active: `docker compose --profile network up -d mcp-relay` (or just `intellibot/ops/scripts/network_stack.sh restart mcp-relay`).
 
 3. **Publish the aggregated URL.** Set `CODEX_MCP_PUBLIC_ENDPOINT` (either in `.env` or the compose service definition) to the proxy path, for example `https://fastmcp.example.com/codex/mcp/`. MCP clients will then pick up the proxied URL from the manifest. The raw `http://localhost:8105/mcp/` endpoint continues to work for local debugging.
 
 Once these steps are complete, Codex appears alongside the other toolboxes that the shared FastMCP gateway serves—no additional compose services are required, and new wrappers can be added simply by dropping more config folders into `ops/mcp/`.
 
-> 🔐 **Local-only default:** Because the `mcp-legacy` profile is inactive, `cloudflared` (the general MCP tunnel) stays down. Only the OpenWebUI tunnel (`cloudflared-openwebui`) is left for remote access. Re-enable the shared MCP tunnel later with `docker compose --profile mcp-legacy up -d cloudflared` if you decide to publish Codex or the legacy servers externally.
+> 🔐 **Local-only default:** With the `network` profile idle, `cloudflared` (the shared MCP tunnel) stays down, leaving only the OpenWebUI tunnel (`cloudflared-openwebui`) for remote access. Bring the general tunnel back with `docker compose --profile network up -d cloudflared` or `intellibot/ops/scripts/network_stack.sh up cloudflared` if you decide to publish Codex or the legacy servers externally.

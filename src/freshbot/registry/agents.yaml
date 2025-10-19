@@ -185,3 +185,23 @@ agents:
   - kb.entries
   enabled: true
   notes: Deep exploration agent that approximates MCTS to justify its recommendation.
+- name: freshbot-goap-planner
+  type: planner
+  model_alias: connector_goap_planner
+  system_prompt: null
+  params:
+    entrypoint: freshbot.agents.frameworks.goap:goap_planner
+    service_alias: connector_goap_planner
+    defaults:
+      plan_path: /plan
+      timeout_seconds: 45
+    generation:
+      response_mime_type: application/json
+      max_output_tokens: 512
+      thinking_mode: disabled
+      thinking_budget_tokens: 128
+  db_scope:
+  - task.projects
+  - task.tasks
+  enabled: true
+  notes: Deterministic GOAP planner backed by the external planning service.

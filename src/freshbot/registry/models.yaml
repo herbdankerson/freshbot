@@ -73,36 +73,106 @@ models:
   name: connector_ollama_code_embedding
   provider: connectors
   purpose: connector
-  endpoint: http://ollama:11434/api/embeddings
+  endpoint: ${CODE_EMBED_BASE_URL:-http://qwen3-embed:8080/v1/embeddings}
   default_params:
     connector_type: embedding
-    driver: ollama
-    description: Code embedding via manutic/nomic-embed-code on Ollama
-    model: manutic/nomic-embed-code
-    dims: 1536
+    driver: openai
+    description: Code embedding via nomic-embed-code (llama-server)
+    model: nomic-embed-code
+    dims: 3584
     schema:
       request:
         required:
         - model
-        - prompt
+        - input
       response:
         required:
-        - embedding
-    prompt_template: 'Represent this code content for semantic retrieval:
-
-      {text}'
-    request_overrides:
-      options:
-        embedding_type: code
+        - data
+    timeout_seconds: 300
+  config:
+    api_style: openai
+- alias: connector_nv_embed
+  name: connector_nv_embed
+  provider: connectors
+  purpose: connector
+  endpoint: ${NV_EMBED_BASE_URL}
+  default_params:
+    connector_type: embedding
+    driver: openai
+    description: NV-Embed-v2 embedding service
+    model: nv-embed-v2
+    dims: 4096
+    schema:
+      request:
+        required:
+        - model
+        - input
+      response:
+        required:
+        - data
+    timeout_seconds: 120
+- alias: connector_legal_embed
+  name: connector_legal_embed
+  provider: connectors
+  purpose: connector
+  endpoint: ${LEGAL_EMBED_BASE_URL}
+  default_params:
+    connector_type: embedding
+    driver: openai
+    description: Legal domain embedding service (Nomic fine-tune)
+    model: legal-embed
+    dims: 768
+    schema:
+      request:
+        required:
+        - model
+        - input
+      response:
+        required:
+        - data
     timeout_seconds: 120
 - alias: emb-code
   name: emb-code
   provider: ollama
   purpose: embedding
-  endpoint: http://ollama:11434/api/embeddings
-  dims: 1024
+  endpoint: ${CODE_EMBED_BASE_URL:-http://qwen3-embed:8080/v1/embeddings}
+  dims: 3584
   default_params:
     gateway_alias: connector_ollama_code_embedding
     connector_type: embedding
     driver: ollama
-    description: Active code embedding space via Ollama gateway
+    description: Active code embedding space via nomic-embed-code (llama-server)
+- alias: emb-general
+  name: emb-general
+  provider: nvembed
+  purpose: embedding
+  endpoint: ${NV_EMBED_BASE_URL}
+  dims: 4096
+  default_params:
+    model: nv-embed-v2:search_document
+    path: /v1/embeddings
+    timeout_seconds: 360
+    description: NV-Embed-v2 general embedding space
+- alias: emb-legal
+  name: emb-legal
+  provider: legalembed
+  purpose: embedding
+  endpoint: ${LEGAL_EMBED_BASE_URL}
+  dims: 768
+  default_params:
+    model: simonosgoode/nomic_embed_fine_tune_law_1.5:search_document
+    path: /v1/embeddings
+    timeout_seconds: 240
+    description: Nomic legal embedding space
+
+- alias: connector_goap_planner
+  name: connector_goap_planner
+  provider: connectors
+  purpose: connector
+  endpoint: ${GOAP_PLANNER_URL}
+  default_params:
+    connector_type: planning
+    driver: goap
+    description: Goal-Oriented Action Planner service
+    plan_path: /plan
+    timeout_seconds: 45

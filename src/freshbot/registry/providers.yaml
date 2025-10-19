@@ -2,9 +2,12 @@ providers:
   - slug: litellm
     display_name: LiteLLM Router
     notes: Central router for language model traffic via LiteLLM.
-  - slug: tei
-    display_name: Text Embeddings Inference
-    notes: Local TEI embedding backends for Freshbot.
+  - slug: nvembed
+    display_name: NV-Embed Service
+    notes: NV-Embed-v2 quantized embedding service hosted in-container.
+  - slug: legalembed
+    display_name: Legal Embedding Service
+    notes: SentenceTransformer-based legal embedding service.
   - slug: ollama
     display_name: Ollama Gateway
     notes: Local Ollama runtime for Qwen-based models and embeddings.
